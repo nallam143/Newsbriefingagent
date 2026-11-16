@@ -9,11 +9,18 @@ const AI_LAYER_URL = process.env.AI_LAYER_URL || 'http://localhost:8001';
  * Call the Python FastAPI AI layer via HTTP.
  */
 async function callAILayer(articles, options = {}) {
-  const response = await fetch(`${AI_LAYER_URL}/briefing`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ articles, options }),
-  });
+  let response;
+  try {
+    response = await fetch(`${AI_LAYER_URL}/briefing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ articles, options }),
+    });
+  } catch {
+    throw Object.assign(new Error(
+      'Cannot connect to the AI briefing service. Start the service in the ai-layer folder, then try again. If it is already running, check AI_LAYER_URL in backend/.env.'
+    ), { statusCode: 503 });
+  }
 
   if (!response.ok) {
     const text = await response.text();

@@ -6,6 +6,10 @@ const sourcesRepo = require('../db/repositories/sources');
 const briefingsRepo = require('../db/repositories/briefings');
 const { runFullPipeline } = require('../agents/runner');
 const { postToTelegram } = require('../agents/poster');
+const { getTelegramStatus } = require('../services/telegram');
+
+// Configuration presence only; never return the token or make a test post.
+router.get('/telegram/status', (req, res) => res.json(getTelegramStatus()));
 
 // Health
 router.get('/health', (req, res) => {
@@ -61,7 +65,7 @@ router.post('/run', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -71,7 +75,7 @@ router.post('/briefings/:id/post', async (req, res) => {
     const result = await postToTelegram(req.params.id);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message, delivered: err.delivered, total: err.total });
   }
 });
 

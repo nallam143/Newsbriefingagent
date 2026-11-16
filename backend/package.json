@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "init-db": "node src/db/init.js"
+    "init-db": "node src/db/init.js",
+    "test": "node --test test/*.test.js",
+    "telegram:check": "node src/scripts/telegram-setup.js check",
+    "telegram:chats": "node src/scripts/telegram-setup.js chats"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",

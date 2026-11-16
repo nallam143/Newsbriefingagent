@@ -43,3 +43,8 @@ export async function postBriefing(id) {
   const { data } = await api.post(`/briefings/${id}/post`);
   return data;
 }
+
+export async function getTelegramStatus() {
+  const { data } = await api.get('/telegram/status');
+  return data;
+}

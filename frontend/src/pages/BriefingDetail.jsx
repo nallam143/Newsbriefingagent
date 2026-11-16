@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getBriefing, postBriefing } from '../services/api';
+import { getBriefing, postBriefing, getTelegramStatus } from '../services/api';
 import { CATEGORY_ORDER, categoryLabel } from '../services/categories';
 
 function safeArticleUrl(value) {
@@ -17,6 +17,7 @@ export default function BriefingDetail() {
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [msg, setMsg] = useState('');
+  const [telegram, setTelegram] = useState(null);
 
   useEffect(() => {
     getBriefing(id)
@@ -25,14 +26,18 @@ export default function BriefingDetail() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    getTelegramStatus().then(setTelegram).catch(() => setTelegram(null));
+  }, [id]);
+
   const handlePost = async () => {
+    if (posting) return;
     setPosting(true);
     setMsg('');
     try {
-      await postBriefing(id);
-      setMsg('✅ Posted to Telegram');
-      const updated = await getBriefing(id);
-      setBriefing(updated);
+      const result = await postBriefing(id);
+      setMsg(result.alreadyPosted ? '✅ This briefing was already sent to Telegram.' : `✅ Sent to Telegram${result.messages > 1 ? ` in ${result.messages} messages` : ''}.`);
+      setBriefing((current) => ({ ...current, status: 'posted', posted_at: result.postedAt }));
     } catch (err) {
       setMsg('❌ ' + (err.response?.data?.error || err.message));
     } finally {
@@ -71,12 +76,17 @@ export default function BriefingDetail() {
         </div>
         {briefing.status !== 'posted' && !incomplete && (
           <button onClick={handlePost} disabled={posting}>
-            {posting ? 'Posting…' : 'Send to Telegram'}
+            {posting ? 'Sending…' : 'Send to Telegram'}
           </button>
         )}
       </div>
 
-      {msg && <div className="card">{msg}</div>}
+      {msg && <div className="card" role="status" aria-live="polite">{msg}</div>}
+      {telegram && !telegram.configured && briefing.status !== 'posted' && (
+        <div className="card" role="status">
+          Telegram setup is needed. Set {telegram.missing.join(' and ')} in backend/.env, add your bot as a channel administrator with permission to post, and restart the backend.
+        </div>
+      )}
 
       {!incomplete && (
         <nav className="topic-list" aria-label="Briefing categories">
