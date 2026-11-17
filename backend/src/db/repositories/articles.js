@@ -26,8 +26,11 @@ function getRecent(hours = 36) {
   return db.prepare(`
     SELECT a.*, s.name as source_name, s.category
     FROM articles a
-    LEFT JOIN sources s ON a.source_id = s.id
+    JOIN sources s ON a.source_id = s.id
     WHERE a.fetched_at >= datetime('now', ?)
+      -- A disabled source must not contribute older, already-stored articles
+      -- to a new AI briefing.
+      AND s.is_active = 1
     ORDER BY a.published_at DESC
   `).all(`-${hours} hours`);
 }
