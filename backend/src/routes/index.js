@@ -7,6 +7,7 @@ const briefingsRepo = require('../db/repositories/briefings');
 const { runFullPipeline } = require('../agents/runner');
 const { postToTelegram } = require('../agents/poster');
 const { getTelegramStatus } = require('../services/telegram');
+const { APP_TIMEZONE } = require('../services/time');
 
 // Configuration presence only; never return the token or make a test post.
 router.get('/telegram/status', (req, res) => res.json(getTelegramStatus()));
@@ -20,7 +21,7 @@ router.get('/health', (req, res) => {
     scheduler: {
       expression,
       enabled: cron.validate(expression),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone: APP_TIMEZONE,
     },
   });
 });

@@ -12,8 +12,24 @@ const labels = {
   general: 'General',
 };
 
+const categoryClasses = {
+  science: 'science',
+  sport: 'sports',
+  sports: 'sports',
+  politics: 'politics',
+  tech: 'technology',
+  technology: 'technology',
+  world: 'world',
+  business: 'business',
+  general: 'general',
+};
+
 export function categoryLabel(value) {
   return labels[String(value || 'general').toLowerCase()] || 'General';
+}
+
+export function categoryClass(value) {
+  return categoryClasses[String(value || 'general').toLowerCase()] || 'general';
 }
 
 export function distinctSources(sources) {

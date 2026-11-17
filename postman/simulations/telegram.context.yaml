@@ -1,0 +1,30 @@
+purpose:
+  stands_in_for: Telegram Bot API sendMessage for one configured channel
+  unblocks: Local verification of the Send to Telegram button's backend delivery flow
+assumptions:
+  - id: send-message-contract
+    status: supported
+    claim: sendMessage accepts a destination chat_id and text up to 4096 characters and returns a Message on success.
+    reason: The official Telegram contract documents these fields and the message limit.
+    verification: Read the official contract on 2026-11-15; exercised the installed v2 SDK over HTTP using form-encoded requests to the local stand-in. No live Telegram messages sent.
+    source: https://core.telegram.org/bots/api#sendmessage
+    updated_at: '2026-11-15'
+  - id: caller-delivery-and-failures
+    status: supported
+    claim: In the local scenarios run, the backend sends all chunks before marking posted, deduplicates concurrent and completed requests, and surfaces partial delivery and Telegram errors.
+    reason: The real Express routes, repositories with an in-memory SQLite database, and Telegram v2 client ran against the stand-in.
+    verification: All 14 tests passed on 2026-11-15 both against a standalone HTTP mock and Postman simulation. Simulation request logs confirmed successful sendMessage requests plus 400, 401, 403, 429 and 500 responses and the delayed response. The timeout was not retried. Frontend production build passed separately.
+    source: backend/test/telegram.test.js; postman/mocks/telegram/default.js
+    updated_at: '2026-11-15'
+  - id: live-channel-access
+    status: unknown
+    claim: The user's bot can post to the chosen Telegram channel.
+    reason: A real bot token and numeric channel ID have not been supplied or configured. The owner mock search was skipped because this CLI does not support postman status; Orbit lookup was unavailable, so the stand-in uses the official contract.
+    verification: Live delivery not attempted. Set credentials locally, run npm run telegram:check, then use Send to Telegram to verify real delivery.
+    source: backend/src/scripts/telegram-setup.js; README.md
+    updated_at: '2026-11-15'
+fingerprints:
+  - id: local-validation
+    date: '2026-11-15'
+    commit: null
+    cli: Postman 1.75.0; Node 24.16.0; node-telegram-bot-api 2.4.0

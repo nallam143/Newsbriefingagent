@@ -28,7 +28,13 @@ function getById(id) {
   const briefing = db.prepare('SELECT * FROM briefings WHERE id = ?').get(id);
   if (!briefing) return null;
 
-  const articles = db.prepare(`
+  const articles = getArticlesForBriefing(id);
+
+  return { ...briefing, articles };
+}
+
+function getArticlesForBriefing(id) {
+  return db.prepare(`
     SELECT a.*, ba.rank, s.name as source_name
     FROM briefing_articles ba
     JOIN articles a ON ba.article_id = a.id
@@ -36,16 +42,15 @@ function getById(id) {
     WHERE ba.briefing_id = ?
     ORDER BY ba.rank
   `).all(id);
-
-  return { ...briefing, articles };
 }
 
 function getLatest(limit = 10) {
-  return db.prepare(`
+  const briefings = db.prepare(`
     SELECT * FROM briefings
     ORDER BY created_at DESC
     LIMIT ?
   `).all(limit);
+  return briefings.map((briefing) => ({ ...briefing, articles: getArticlesForBriefing(briefing.id) }));
 }
 
 function getByDate(date) {

@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getBriefings, getSources, runPipeline } from '../services/api';
-import { CATEGORY_ORDER, categoryLabel, distinctSources, groupSources } from '../services/categories';
+import { CATEGORY_ORDER, categoryClass, categoryLabel, distinctSources, groupSources } from '../services/categories';
+import { formatIndiaDateTime } from '../services/dateTime';
+import StoryThumbnail from '../components/StoryThumbnail';
 
 function readBriefing(row) {
   try {
@@ -36,6 +38,27 @@ function scheduleLabel(scheduler) {
     ? 'IST'
     : scheduler.timezone || 'server time';
   return `Daily ${String(hour % 12 || 12).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'} ${timezone}`;
+}
+
+function PipelineIcon({ name }) {
+  const props = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round', strokeLinejoin: 'round' };
+
+  if (name === 'pipeline') {
+    return <svg {...props}><circle cx="5" cy="18" r="2.2" /><circle cx="12" cy="6" r="2.2" /><circle cx="19" cy="18" r="2.2" /><path d="m6.3 16 4.4-8" /><path d="m13.3 7.9 4.4 8" /></svg>;
+  }
+  if (name === 'collect') {
+    return <svg {...props}><circle cx="5.4" cy="18.5" r="1.25" fill="currentColor" stroke="none" /><path d="M4.7 11.5a7 7 0 0 1 7.8 7.8" /><path d="M4.7 6.5a12 12 0 0 1 13 13" /></svg>;
+  }
+  if (name === 'filter') {
+    return <svg {...props}><path d="M3 5h18l-7 8v5.1l-4 1.9V13L3 5Z" /></svg>;
+  }
+  if (name === 'analyze') {
+    return <svg {...props}><circle cx="10.5" cy="11" r="5" /><path d="m14.3 14.8 4.5 4.5" /><path d="M18.5 4v3" /><path d="M17 5.5h3" /><path d="M4.5 4.7v2" /><path d="M3.5 5.7h2" /></svg>;
+  }
+  if (name === 'draft') {
+    return <svg {...props}><path d="M6 3h9l3 3v9" /><path d="M15 3v4h4" /><path d="M6 8v12h7" /><path d="M9 12h4" /><path d="M9 15h2.5" /><path d="m13 19.5 5.8-5.8 2 2-5.8 5.8-2.7.7.7-2.7Z" /></svg>;
+  }
+  return <svg {...props}><path d="m21 3-7.3 18-3.5-7.2L3 10.3 21 3Z" /><path d="m10.2 13.8 4.1-4.1" /></svg>;
 }
 
 export default function Dashboard({ scheduler }) {
@@ -89,8 +112,20 @@ export default function Dashboard({ scheduler }) {
   const visibleStories = latestData?.sections
     .filter((section) => categoryLabel(section.category) === currentCategory)
     .flatMap((section) => section.stories) || [];
-  const completedStages = latest ? (latest.status === 'posted' ? 4 : 3) : 0;
-  const stages = ['Fetch RSS', 'Generate', 'Save draft', 'Telegram'];
+  const completedStages = latest ? (latest.status === 'posted' ? 5 : 4) : 0;
+  const stages = [
+    { label: 'Collect RSS', detail: `${activeSources.length} sources`, icon: 'collect' },
+    { label: 'Filter & rank', detail: latest ? `${latestData.storyCount} stories kept` : 'Select the strongest stories', icon: 'filter' },
+    { label: 'Analyze', detail: 'AI checks relevance', icon: 'analyze' },
+    { label: 'Draft briefing', detail: latest ? 'Draft saved' : 'Create the daily brief', icon: 'draft' },
+    { label: 'Deliver', detail: latest?.status === 'posted' ? 'Sent to Telegram' : 'Waiting for review', icon: 'deliver' },
+  ];
+  const pipelineProgress = Math.round((completedStages / stages.length) * 100);
+  const pipelineNote = running
+    ? 'Preparing today’s briefing…'
+    : latest
+      ? 'Last briefing is ready for review.'
+      : 'Your first briefing will begin here.';
   const postedBriefing = briefings.find((row) => row.status === 'posted');
   const coverageColors = ['#796af5', '#2bd7b0', '#fb789e', '#8aa9ed', '#efb75f', '#4fc9dc'];
   const coverageRows = (latestData?.sections || []).map((section) => ({
@@ -109,10 +144,10 @@ export default function Dashboard({ scheduler }) {
   return (
     <div className="dashboard-page">
       <div className="page-heading">
-        <div>
-          <p className="eyebrow">YOUR NEWS AGENT</p>
-          <h1>News Pulse</h1>
-          <p className="muted">Autonomous Briefings for the Modern Agent</p>
+        <div className="home-masthead-copy">
+          <h1 className="masthead-wordmark">News Pulse</h1>
+          <p className="eyebrow">AUTONOMOUS NEWS BRIEFING</p>
+          <p className="masthead-tagline">Finds, filters, and delivers the day’s most important news — automatically.</p>
         </div>
         <div className="hero-controls">
           <div className={`cron-badge ${scheduler?.enabled ? 'active' : ''}`} title={scheduler?.expression ? `Cron expression: ${scheduler.expression}` : undefined}>
@@ -132,21 +167,31 @@ export default function Dashboard({ scheduler }) {
       {message && <div className="notice" role="status">{message}</div>}
 
       <div className="stats-grid">
-        <div className="stat-card"><span className="stat-label">SOURCES ACTIVE</span><strong>{activeSources.length}</strong><small>RSS feeds enabled</small></div>
-        <div className="stat-card"><span className="stat-label">CATEGORIES</span><strong>{topics.length}</strong><small>From active feeds</small></div>
-        <div className="stat-card"><span className="stat-label">STORIES KEPT</span><strong>{latestData?.storyCount ?? '—'}</strong><small>{latest ? 'Latest complete briefing' : 'No complete briefing yet'}</small></div>
-        <div className="stat-card"><span className="stat-label">LATEST DELIVERY</span><strong className="delivery-value">{latest?.status === 'posted' ? 'Posted' : latest ? 'Draft' : '—'}</strong><small>{latest?.status === 'posted' ? 'Telegram' : 'Manual posting available'}</small></div>
+        <div className="stat-card stat-sources"><span className="stat-label">SOURCES ACTIVE</span><strong>{activeSources.length}</strong><small>RSS feeds enabled</small></div>
+        <div className="stat-card stat-categories"><span className="stat-label">CATEGORIES</span><strong>{topics.length}</strong><small>From active feeds</small></div>
+        <div className="stat-card stat-stories"><span className="stat-label">STORIES KEPT</span><strong>{latestData?.storyCount ?? '—'}</strong><small>{latest ? 'Latest complete briefing' : 'No complete briefing yet'}</small></div>
+        <div className="stat-card stat-delivery"><span className="stat-label">LATEST DELIVERY</span><strong className="delivery-value">{latest?.status === 'posted' ? 'Posted' : latest ? 'Draft' : '—'}</strong><small>{latest?.status === 'posted' ? 'Telegram' : 'Manual posting available'}</small></div>
       </div>
 
-      <section className="panel pipeline-panel">
-        <div className="panel-heading"><h2>Agent Pipeline</h2><span>{running ? 'Running now' : latest ? 'Latest complete briefing' : 'Awaiting first briefing'}</span></div>
-        <div className="pipeline-steps">
+      <section className="panel pipeline-panel" aria-label="Briefing pipeline progress">
+        <div className="pipeline-intro">
+          <span className="pipeline-intro-icon" aria-hidden="true"><PipelineIcon name="pipeline" /></span>
+          <div><h2>Briefing Pipeline</h2><p>{pipelineNote}</p></div>
+        </div>
+        <div className="pipeline-stage-list">
           {stages.map((stage, index) => (
-            <div className={`pipeline-step ${index < completedStages ? 'complete' : ''}`} key={stage}>
-              <span className="step-mark">{index < completedStages ? '✓' : index + 1}</span>
-              <span>{stage}</span>
+            <div className={`pipeline-stage-card ${index < completedStages ? 'complete' : ''} ${running && index === completedStages ? 'current' : ''}`} key={stage.label}>
+              {index < completedStages && <span className="pipeline-stage-status" aria-label="Complete">✓</span>}
+              <span className="pipeline-stage-icon" aria-hidden="true"><PipelineIcon name={stage.icon} /></span>
+              <strong>{stage.label}</strong>
+              <small>{stage.detail}</small>
             </div>
           ))}
+        </div>
+        <div className="pipeline-progress" aria-label={`Pipeline progress: ${pipelineProgress}%`}>
+          <span>Pipeline Progress</span>
+          <strong>{pipelineProgress}%</strong>
+          <div className="pipeline-progress-track"><span style={{ width: `${pipelineProgress}%` }} /></div>
         </div>
       </section>
 
@@ -156,7 +201,7 @@ export default function Dashboard({ scheduler }) {
           <div>
             <p className="eyebrow">LATEST BRIEFING</p>
             <h2>{selectedCategory ? `${selectedCategory} briefing` : latest?.title || 'No briefing yet'}</h2>
-            <p className="muted">{latest ? `${new Date(latest.created_at).toLocaleString()} · ${latest.ai_provider || 'AI'} · ${latestData.storyCount} stories` : 'Run the pipeline to create a briefing from your active feeds.'}</p>
+            <p className="muted">{latest ? `${formatIndiaDateTime(latest.created_at)} · ${latest.ai_provider || 'AI'} · ${latestData.storyCount} stories` : 'Run the pipeline to create a briefing from your active feeds.'}</p>
           </div>
           {latest && <span className={`badge ${latest.status}`}>{latest.status}</span>}
         </div>
@@ -168,7 +213,7 @@ export default function Dashboard({ scheduler }) {
                 {latestCategories.map((category) => (
                   <button
                     type="button"
-                    className={`category-tab ${currentCategory === category ? 'active' : ''}`}
+                    className={`category-tab category-${categoryClass(category)} ${currentCategory === category ? 'active' : ''}`}
                     key={category}
                     onClick={() => setSearchParams({ category })}
                   >{category}</button>
@@ -182,11 +227,12 @@ export default function Dashboard({ scheduler }) {
                 const url = safeUrl(story.url);
                 return (
                   <article className="story-preview" key={`${story.headline}-${index}`}>
-                    <span className="story-accent" />
-                    <div>
+                    <StoryThumbnail story={story} articles={latest?.articles} category={currentCategory} />
+                    <div className="story-preview-copy">
+                      <span className={`story-category category-${categoryClass(currentCategory)}`}>{categoryLabel(currentCategory)}</span>
                       <h3>{story.headline || 'Untitled story'}</h3>
                       <p>{story.summary}</p>
-                      <div className="story-meta">{categoryLabel(currentCategory)}{story.source && ` · ${story.source}`}{url && <> · <a href={url} target="_blank" rel="noopener noreferrer">Source ↗</a></>}</div>
+                      <div className="story-meta">{story.source}{url && <> · <a href={url} target="_blank" rel="noopener noreferrer">Read source ↗</a></>}</div>
                     </div>
                   </article>
                 );
@@ -200,20 +246,12 @@ export default function Dashboard({ scheduler }) {
       </section>
 
         <aside className="dashboard-rail" aria-label="Publishing and coverage">
-          <section className="panel rail-panel">
-            <h2>Publishing</h2>
-            <div className="channel-row">
-              <span className="channel-icon telegram-icon" aria-hidden="true">T</span>
-              <span className="channel-copy"><strong>Telegram</strong><small>{latest?.status === 'posted' ? 'Latest briefing sent' : latest ? 'Draft ready for review' : 'No briefing yet'}</small></span>
-              <span className={`channel-state ${latest?.status === 'posted' ? 'sent' : ''}`}>{latest?.status === 'posted' ? 'Posted' : latest ? 'Draft' : 'Waiting'}</span>
-            </div>
-            <div className="channel-row">
-              <span className="channel-icon instagram-icon" aria-hidden="true">IG</span>
-              <span className="channel-copy"><strong>Instagram</strong><small>Publishing integration is not available</small></span>
-              <span className="channel-state unavailable">Unavailable</span>
-            </div>
-            {latest?.status === 'draft' && <Link className="channel-action" to={`/briefings/${latest.id}`}>Review Telegram draft →</Link>}
-            {postedBriefing && <div className="recent-post"><strong>Recent Telegram post</strong><span>{postedBriefing.title || 'Briefing'} · {new Date(postedBriefing.posted_at || postedBriefing.created_at).toLocaleString()}</span></div>}
+          <section className="panel rail-panel telegram-publishing">
+            <div className="telegram-heading"><span className="telegram-plane" aria-hidden="true">➤</span><div><p className="eyebrow">PUBLISHING</p><h2>Telegram</h2></div></div>
+            <div className="telegram-detail"><span>Draft status</span><strong>{latest?.status === 'posted' ? 'Posted' : latest ? 'Ready for review' : 'Waiting'}</strong></div>
+            <div className="telegram-detail"><span>Next delivery</span><strong>{scheduleLabel(scheduler)}</strong></div>
+            {latest?.status === 'draft' && <Link className="channel-action" to={`/briefings/${latest.id}`}>Review Telegram draft <span aria-hidden="true">➤</span></Link>}
+            {postedBriefing && <div className="recent-post"><strong>Latest Telegram post</strong><span>{postedBriefing.title || 'Briefing'} · {formatIndiaDateTime(postedBriefing.posted_at || postedBriefing.created_at)}</span></div>}
           </section>
 
           <section className="panel rail-panel">
@@ -248,7 +286,7 @@ export default function Dashboard({ scheduler }) {
             return (
               <Link className="recent-row" to={`/briefings/${row.id}`} key={row.id}>
                 <span className="recent-dot" />
-                <span className="recent-main"><strong>{row.title || `Briefing ${row.date}`}</strong><small>{new Date(row.created_at).toLocaleString()} · {row.ai_provider || 'AI'}</small></span>
+                <span className="recent-main"><strong>{row.title || `Briefing ${row.date}`}</strong><small>{formatIndiaDateTime(row.created_at)} · {row.ai_provider || 'AI'}</small></span>
                 <span className="recent-categories">{labels.slice(0, 3).join(' · ') || 'Incomplete'}</span>
                 <span className={`badge ${data.storyCount ? row.status : 'incomplete'}`}>{data.storyCount ? `${data.storyCount} stories` : 'incomplete'}</span>
               </Link>

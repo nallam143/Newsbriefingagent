@@ -2,6 +2,7 @@ const { collectAll } = require('./collector');
 const { postToTelegram } = require('./poster');
 const articlesRepo = require('../db/repositories/articles');
 const briefingsRepo = require('../db/repositories/briefings');
+const { appDate } = require('../services/time');
 
 const AI_LAYER_URL = process.env.AI_LAYER_URL || 'http://localhost:8001';
 
@@ -66,7 +67,7 @@ async function runFullPipeline(options = {}) {
     .filter(Boolean);
 
   // 5. Save briefing
-  const today = new Date().toISOString().slice(0, 10);
+  const today = appDate();
   const briefing = briefingsRepo.create({
     date: today,
     title: aiResult.title,
